@@ -76,6 +76,12 @@ input.code{font-family:var(--display);font-size:22px;letter-spacing:.18em;text-t
 .cell .piece.new{box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)}
 .mini{display:inline-flex;flex-direction:column;align-items:center;width:30px;font-size:11px;font-weight:700;color:var(--ink-soft)}
 .mini svg{width:28px;height:28px}
+.pool{display:grid;gap:4px}
+.poolrow{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.poolname{width:58px;font-size:12px;font-weight:700;color:var(--ink-soft);flex-shrink:0}
+.poolpc{display:inline-flex}
+.poolpc svg{width:30px;height:30px}
+.poolpc.gone{opacity:.14}
 .events{font-size:13px;color:var(--ink-soft);min-height:1.3em;margin-top:4px}
 .events b{color:var(--ink)}
 .outnote{background:var(--card);border:1.5px solid var(--bad);border-radius:10px;padding:8px 12px;font-weight:700}
@@ -177,6 +183,10 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
       </div>
       <div class="hand" id="hand" style="margin-top:10px"></div>
       <div class="legend" style="margin-top:8px" id="hint"></div>
+    </div>
+    <div class="panel" id="poolpanel" style="margin-top:12px">
+      <div class="row" style="justify-content:space-between"><h3 style="font-size:17px">Pool</h3><span class="legend" id="poolCount"></span></div>
+      <div class="pool" id="pool" style="margin-top:6px"></div>
     </div>
   </section>
 
@@ -285,14 +295,14 @@ function tokensFor(n){const t=[];for(const v of [10,5,1]) while(n>=v){t.push(v);
 // players: [{name,bot,style}] ; g.phase: 'play' | 'roundend' | 'gameover'
 function newGame({side,players}){
   const g={side,players:players.map((p,i)=>({name:p.name,bot:!!p.bot,style:p.style||'careful',seat:i,tokens:[],hand:[],active:true,emptied:false})),
-    round:1,phase:'play',board:null,turn:0,pile:[],lastPlaced:[],lastBy:null,roundResults:null,events:[],evn:0};
+    round:1,phase:'play',board:null,turn:0,pile:[],lastPlaced:[],lastBy:null,roundResults:null,events:[],evn:0,placed:[]};
   startRound(g); return g;
 }
 function startRound(g){
   const n=g.players.length, deck=makeDeck(n), per=n===2?5:Math.floor(deck.length/n);
   g.players.forEach((p,i)=>{p.hand=deck.slice(i*per,(i+1)*per);p.active=true;p.emptied=false;});
   g.pile=n===2?deck.slice(2*per):[];
-  g.board=newBoard(g.side); g.turn=(g.round-1)%n; g.lastPlaced=[]; g.lastBy=null; g.phase='play'; g.roundResults=null; g.events=[];
+  g.board=newBoard(g.side); g.turn=(g.round-1)%n; g.lastPlaced=[]; g.lastBy=null; g.phase='play'; g.roundResults=null; g.events=[]; g.placed=[];
   advanceTurn(g,false);
 }
 // Skip players with no legal move; end the round when nobody can play.
@@ -311,7 +321,7 @@ function advanceTurn(g,step){
   endRound(g);
 }
 function place(g,player,card,cells){
-  const b=g.board,id=b.nextId++;
+  const b=g.board,id=b.nextId++; g.placed.push({s:card.s,c:card.c});
   for(const [c,r] of cells) b.cells[idx(c,r)]={id,c:card.c};
   player.hand.splice(player.hand.indexOf(card),1);
   g.lastPlaced=cells.map(([c,r])=>idx(c,r)); g.lastBy=player.seat;
@@ -384,7 +394,7 @@ function botStep(g){
 function viewFor(g,seat){
   const open=openFlowers(g.board);
   return {side:g.side,round:g.round,nRounds:g.players.length,phase:g.phase,turn:g.turn,seat,
-    board:{side:g.side,cells:g.board.cells,blocked:g.board.blocked,flowers:g.board.flowers},lastPlaced:g.lastPlaced,open,events:g.events.slice(-6),
+    board:{side:g.side,cells:g.board.cells,blocked:g.board.blocked,flowers:g.board.flowers},lastPlaced:g.lastPlaced,open,events:g.events.slice(-6),placed:g.placed,nPlayers:g.players.length,
     players:g.players.map(p=>({name:p.name,bot:p.bot,cards:p.hand.length,tokens:p.tokens,total:p.tokens.reduce((a,b)=>a+b,0),active:p.active,emptied:p.emptied,out:!p.active&&!p.emptied})),
     hand:seat!=null&&g.players[seat]?g.players[seat].hand:[],
     roundResults:g.roundResults};
@@ -743,6 +753,7 @@ function render(){
   else $('banner').innerHTML=`<b>Round ${v.round} is over — this is the final board</b> <span class="legend">${BOARDS[v.side].name} · cards left: ${left}</span>`;
   $('events').innerHTML=(v.events||[]).slice(-3).map(e=>{const nm=e.seat===you?'You':esc(v.players[e.seat].name);
     return e.t==='out'?`<b>${nm}</b> ${e.seat===you?'were':'was'} out — no legal play for ${e.cards} card${e.cards===1?'':'s'}`:`<b>${nm}</b> emptied ${e.seat===you?'your':'their'} hand`;}).join(' · ');
+  renderPool(v);
   if(v.phase!=='play') return;
   const hand=$('hand'),st=$('status'),hint=$('hint'),ctl=$('controls');
   const flowersTxt=COLORS.map(k=>`${CNAME[k]} ${v.open[k]}`).join(', ');
@@ -766,6 +777,19 @@ function render(){
     let msg='Not legal here — it must cover an anchor/touch a seed, or touch two different pieces with at least one in the same colour.';
     if(!ghostOK){const card=v.hand[ui.sel];const os=ORI[card.s];if(os.some((o,j)=>j!==ui.ori%os.length&&legal(b,cellsFor(card.s,j,ui.origin[0],ui.origin[1]),card.c)))msg='Not legal in this orientation, but the piece fits here another way — try Rotate or Flip.';}
     st.textContent=ghostOK?'Legal. Tap Place or tap the ghost again.':msg;hint.textContent='Open flowers — '+flowersTxt+'.';}
+}
+// Central pool: every piece in the game, with the ones already on the board faded out.
+function renderPool(v){
+  const placed=(v.placed||[]).slice(); let left=0,total=0;
+  $('pool').innerHTML=COLORS.map(k=>{
+    const shapes=['F','L','N','P','V','Y','Z']; if(k==='B'&&v.nPlayers!==5) shapes.push('V');
+    let rowLeft=0;
+    const pcs=shapes.map(sh=>{total++;
+      const j=placed.findIndex(q=>q&&q.s===sh&&q.c===k); const gone=j>=0; if(gone) placed[j]=null; else {left++;rowLeft++;}
+      return `<span class="poolpc${gone?' gone':''}" title="${CNAME[k]} ${sh}${gone?' (played)':''}">${pieceSVG({s:sh,c:k})}</span>`;}).join('');
+    return `<div class="poolrow"><span class="poolname">${CNAME[k]} ${rowLeft}</span>${pcs}</div>`;
+  }).join('');
+  $('poolCount').textContent=`${left} of ${total} pieces still to play`;
 }
 function onCellClick(e){
   if(!myTurn()||ui.sel===null) return;
