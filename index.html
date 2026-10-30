@@ -74,6 +74,8 @@ input.code{font-family:var(--display);font-size:22px;letter-spacing:.18em;text-t
   border-left:2px solid var(--vine)}
 .cell .piece{position:absolute;inset:-0.5px;box-sizing:border-box;border:0 solid var(--outline)}
 .cell .piece.new{box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)}
+.mini{display:inline-flex;flex-direction:column;align-items:center;width:30px;font-size:11px;font-weight:700;color:var(--ink-soft)}
+.mini svg{width:28px;height:28px}
 .events{font-size:13px;color:var(--ink-soft);min-height:1.3em;margin-top:4px}
 .events b{color:var(--ink)}
 .outnote{background:var(--card);border:1.5px solid var(--bad);border-radius:10px;padding:8px 12px;font-weight:700}
@@ -166,6 +168,7 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
       <div class="board" id="board" aria-label="Vines board"></div>
       <div class="soil" id="soil" aria-hidden="true"></div>
     </div>
+    <div class="panel row" id="endbar" style="margin-top:12px" hidden><button class="primary" id="btnBackScores">Back to scores</button><span class="legend">This is how the board looked when the round ended.</span></div>
     <div class="panel" id="handpanel" style="margin-top:12px">
       <div class="controls" id="controls">
         <button id="btnRot">Rotate ↻</button><button id="btnFlip">Flip ↔</button>
@@ -180,9 +183,9 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
   <!-- SCORES -->
   <section class="panel" id="scores" hidden>
     <h2 id="scoresTitle">Scores</h2>
-    <table class="score" id="scoreTable"></table>
+    <div style="overflow-x:auto"><table class="score" id="scoreTable"></table></div>
     <div class="pen" id="roundNote" style="margin-top:8px"></div>
-    <div class="row" style="margin-top:12px"><button class="primary" id="btnContinue">Continue</button><span class="legend" id="waitNote"></span></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="btnContinue">Continue</button><button id="btnViewBoard">See the final board</button><span class="legend" id="waitNote"></span></div>
   </section>
 
   <details class="panel rules">
@@ -321,7 +324,7 @@ function endRound(g){
     const pts=p.hand.reduce((a,card)=>a+1+open[card.c],0);
     p.tokens.push(...tokensFor(pts)); let bonus=0;
     if(p.emptied&&p.tokens.length){const mx=Math.max(...p.tokens);p.tokens.splice(p.tokens.indexOf(mx),1);bonus=mx;}
-    g.roundResults.push({seat:p.seat,cards:p.hand.length,pts,bonus,total:p.tokens.reduce((a,b)=>a+b,0)});
+    g.roundResults.push({seat:p.seat,cards:p.hand.length,hand:p.hand.map(c=>({s:c.s,c:c.c})),pts,bonus,total:p.tokens.reduce((a,b)=>a+b,0)});
   }
   g.phase=g.round>=g.players.length?'gameover':'roundend';
 }
@@ -670,7 +673,7 @@ $('btnStartTable').onclick=()=>{session.startGame();};
 function onViewUpdate(){
   const v=view;
   if(v.phase!=='play'){render();showScores();return;}
-  $('handpanel').hidden=false;
+  $('handpanel').hidden=false; $('endbar').hidden=true;
   const key=v.round+'-'+v.turn+'-'+v.players.reduce((a,p)=>a+p.cards,0);
   if(key!==lastTurnKey){
     lastTurnKey=key; ui.sel=null;ui.origin=null;ui.ori=0;
@@ -781,14 +784,14 @@ document.addEventListener('keydown',e=>{if(!myTurn())return;if(e.key==='r'||e.ke
 // ---------- scores ----------
 function showScores(){
   const v=view; show('scores'); $('handoff').hidden=true;
-  $('game').hidden=false; $('handpanel').hidden=true; $('btnScores').hidden=true;   // keep the final board visible above the scores
+  $('btnScores').hidden=true; $('endbar').hidden=true; $('btnViewBoard').hidden=false;
   $('scoresTitle').textContent=v.phase==='gameover'?'Final scores':`Round ${v.round} scores`;
-  let h='<tr><th>Player</th><th class="num">Cards left</th><th class="num">This round</th><th>Tokens</th><th class="num">Total</th></tr>';
+  let h='<tr><th>Player</th><th>Cards left (cost)</th><th class="num">This round</th><th>Tokens</th><th class="num">Total</th></tr>';
   const rows=[...v.roundResults].sort((a,b)=>a.total-b.total);
   for(const r of rows){const p=v.players[r.seat];
-    h+=`<tr><td><span class="swatch" style="display:inline-block;vertical-align:middle;width:12px;height:12px;background:${PALETTE[r.seat]};margin-right:6px"></span>${esc(p.name)}</td><td class="num">${r.cards}</td><td class="num">+${r.pts}${r.bonus?` −${r.bonus} (empty hand)`:''}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${r.total}</b></td></tr>`;}
+    h+=`<tr><td><span class="swatch" style="display:inline-block;vertical-align:middle;width:12px;height:12px;background:${PALETTE[r.seat]};margin-right:6px"></span>${esc(p.name)}</td><td>${r.hand&&r.hand.length?r.hand.map(c=>`<span class="mini" title="${CNAME[c.c]} ${c.s}: 1 + ${v.open[c.c]} open">${pieceSVG(c)}${1+v.open[c.c]}</span>`).join(''):'<span class="muted">none</span>'}</td><td class="num">+${r.pts}${r.bonus?` −${r.bonus} (empty hand)`:''}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${r.total}</b></td></tr>`;}
   $('scoreTable').innerHTML=h;
-  $('roundNote').textContent='Flowers left open — '+COLORS.map(k=>`${CNAME[k]} ${v.open[k]}`).join(', ')+'. A leftover card costs 1 plus the open flowers of its colour.';
+  $('roundNote').textContent='Flowers left open — '+COLORS.map(k=>`${CNAME[k]} ${v.open[k]}`).join(', ')+'. Each leftover card costs 1, plus 1 for every open flower of its colour — so a card is never free.';
   const btn=$('btnContinue'); btn.onclick=continueHandler;
   if(v.phase==='gameover'){btn.textContent=`${esc(v.players[rows[0].seat].name)} wins · back to start`;btn.disabled=false;$('waitNote').textContent='';}
   else if(session.kind==='guest'){btn.textContent='Next round';btn.disabled=true;$('waitNote').textContent='Waiting for the host to start the next round.';}
@@ -800,12 +803,14 @@ function continueHandler(){
   const r=session.nextRound(); if(!r.ok)$('waitNote').textContent=r.error;
 }
 $('btnContinue').onclick=continueHandler;
+$('btnViewBoard').onclick=()=>{$('scores').hidden=true;$('game').hidden=false;$('handpanel').hidden=true;$('endbar').hidden=false;$('btnScores').hidden=true;window.scrollTo(0,0);};
+$('btnBackScores').onclick=()=>{$('game').hidden=true;$('endbar').hidden=true;$('scores').hidden=false;};
 $('btnScores').onclick=()=>{ // peek at standings mid-round
   const v=view; if(!v)return;
   $('scoresTitle').textContent='Standings';
   let h='<tr><th>Player</th><th class="num">Cards in hand</th><th>Tokens</th><th class="num">Total</th></tr>';
   v.players.forEach((p,i)=>{h+=`<tr><td>${esc(p.name)}</td><td class="num">${p.cards}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${p.total}</b></td></tr>`;});
-  $('scoreTable').innerHTML=h; $('roundNote').textContent=''; $('waitNote').textContent='';
+  $('scoreTable').innerHTML=h; $('roundNote').textContent=''; $('waitNote').textContent=''; $('btnViewBoard').hidden=true;
   const btn=$('btnContinue'); btn.textContent='Back to the board'; btn.disabled=false; btn.onclick=()=>{show('game');$('handpanel').hidden=false;btn.onclick=continueHandler;};
   show('scores'); $('btnLeave').hidden=false;
 };
