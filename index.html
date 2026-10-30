@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>[hidden]{display:none!important}body{margin:0}</style>
+</head>
+<body>
+<title>Vines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column; board on top, the active player's hand + controls below, scoreboard in a drawer. */
+:root{
+  --paper:#f6f1e3; --paper-2:#efe7d2; --ink:#2f2a24; --ink-soft:#6a5f50; --grid:#cdc4a5;
+  --soil:#7e5c3c; --soil-d:#5e432a; --vine:#5e8c4a; --leaf:#9fc08a; --accent:#5e8c4a; --accent-ink:#fff;
+  --card:#fffdf7; --card-edge:#d9cfb4; --bad:#c0392b; --good:#2e8b57;
+  --R:#c0392b; --G:#2e8b57; --Y:#f2c230; --O:#ee7a2e; --B:#2f63b8;
+  --display:"Baloo 2","Trebuchet MS",sans-serif; --body:"Nunito","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#1f1c18; --paper-2:#2a251f; --ink:#efe8d8; --ink-soft:#bdb3a0; --grid:#4a4336;
+  --soil:#6b4b2f; --soil-d:#3f2c1a; --vine:#7fae63; --leaf:#4f6b40; --accent:#7fae63; --accent-ink:#161410;
+  --card:#2e2922; --card-edge:#4d4437; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#1f1c18; --paper-2:#2a251f; --ink:#efe8d8; --ink-soft:#bdb3a0; --grid:#4a4336;
+  --soil:#6b4b2f; --soil-d:#3f2c1a; --vine:#7fae63; --leaf:#4f6b40; --accent:#7fae63; --accent-ink:#161410;
+  --card:#2e2922; --card-edge:#4d4437; color-scheme:dark}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.4;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;text-wrap:balance}
+h1{font-size:30px;font-weight:800}
+h2{font-size:20px;font-weight:800}
+button{font-family:var(--body);font-weight:700;font-size:14px;border:1.5px solid var(--card-edge);background:var(--card);color:var(--ink);
+  border-radius:10px;padding:8px 14px;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.topbar{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.topbar .sub{color:var(--ink-soft);font-size:13px}
+.panel{background:var(--paper-2);border-radius:14px;padding:14px 16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label{font-weight:600}
+select,input[type=text]{font-family:var(--body);font-size:14px;padding:7px 9px;border-radius:8px;border:1.5px solid var(--card-edge);background:var(--card);color:var(--ink)}
+.players{display:grid;gap:8px}
+.player-row{display:grid;grid-template-columns:28px 1fr 130px;gap:8px;align-items:center}
+.swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--ink)}
+.sides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.sides{grid-template-columns:1fr}}
+.side{border:2px solid var(--card-edge);border-radius:12px;padding:10px 12px;background:var(--card);cursor:pointer}
+.side.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.side p{margin:4px 0 0;color:var(--ink-soft);font-size:13px}
+/* board */
+.boardwrap{display:flex;flex-direction:column;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px}
+.boardwrap>*{margin-inline:auto}
+.board{--cs:clamp(24px,calc((100vw - 40px)/20),44px);display:grid;grid-template-columns:repeat(20,var(--cs));grid-auto-rows:var(--cs);
+  gap:0;background:var(--paper);border:1.5px solid var(--soil-d);position:relative;touch-action:manipulation}
+.cell{border:0.5px solid var(--grid);position:relative;box-sizing:border-box}
+.cell.anchor{background:linear-gradient(transparent 70%,rgba(126,92,60,.18) 70%)}
+.cell.seed{background:var(--soil)}
+.cell.seed::after{content:"";position:absolute;left:38%;bottom:22%;width:24%;height:56%;background:
+  radial-gradient(ellipse at 20% 40%,var(--leaf) 0 42%,transparent 44%),radial-gradient(ellipse at 80% 60%,var(--leaf) 0 42%,transparent 44%);
+  border-left:2px solid var(--vine)}
+.cell .piece{position:absolute;inset:1.5px;border-radius:3px;opacity:.95}
+.cell .piece.new{box-shadow:0 0 0 2px var(--ink) inset}
+.cell .flower{position:absolute;inset:18%;pointer-events:none}
+.cell .ghost{position:absolute;inset:1px;border-radius:3px;opacity:.55;outline:2px dashed var(--ink)}
+.cell .ghost.bad{outline-color:var(--bad);background:repeating-linear-gradient(45deg,rgba(192,57,43,.5) 0 4px,transparent 4px 8px)!important}
+.soil{width:calc(var(--cs) * 20 + 3px);height:calc(var(--cs) * .9);background:var(--soil);border:1.5px solid var(--soil-d);border-top:0;
+  display:flex;justify-content:center;align-items:center;gap:calc(var(--cs) * 1.1);box-sizing:border-box}
+.soil svg{width:calc(var(--cs) * .62);height:calc(var(--cs) * .62)}
+/* hand */
+.hand{display:flex;gap:8px;flex-wrap:wrap}
+.cardbtn{width:62px;height:78px;border-radius:9px;border:2px solid var(--card-edge);background:var(--card);display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.cardbtn.sel{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+.cardbtn.dead{opacity:.4}
+.cardbtn svg{width:48px;height:60px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.status{font-weight:700}
+.turnbanner{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.turnbanner .swatch{width:16px;height:16px}
+.score{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.score th,.score td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--card-edge)}
+.score td.num{text-align:right}
+.tokens{display:inline-flex;gap:3px;flex-wrap:wrap}
+.tok{display:inline-block;min-width:18px;padding:0 4px;border-radius:9px;background:var(--soil);color:#fff;font-size:11px;text-align:center;font-weight:700}
+.overlay{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:24px;z-index:20}
+.overlay .box{max-width:420px;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+.pen{font-size:13px;color:var(--ink-soft)}
+.legend{font-size:13px;color:var(--ink-soft)}
+details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-size:17px}
+.rules p{margin:6px 0}
+@media (prefers-reduced-motion:no-preference){.cell .piece.new{animation:pop .25s ease-out}@keyframes pop{from{transform:scale(.6)}to{transform:scale(1)}}}
+</style>
+
+<div class="wrap" id="app">
+  <div class="topbar">
+    <div><h1>Vines</h1><div class="sub" id="subtitle">A vine-growing pentomino game for 2–6 · pass-and-play with optional bots</div></div>
+    <div class="row"><button id="btnScores" hidden>Scores</button><button id="btnNew" hidden>New game</button></div>
+  </div>
+
+  <!-- SETUP -->
+  <section class="panel" id="setup">
+    <h2>Set up a game</h2>
+    <div class="row" style="margin-top:10px">
+      <label for="nplayers">Players</label>
+      <select id="nplayers"><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select>
+      <span class="legend">Rounds equal the number of players; the start player rotates each round.</span>
+    </div>
+    <div class="players" id="playerList" style="margin-top:10px"></div>
+    <div style="margin-top:14px"><label>Board side</label></div>
+    <div class="sides" style="margin-top:6px">
+      <div class="side sel" id="sideA" tabindex="0" role="button"><b>A · Trellis</b><p>Grow up from the bottom row. 25 flowers in a lattice. The forgiving side.</p></div>
+      <div class="side" id="sideB" tabindex="0" role="button"><b>B · Seeds</b><p>Grow out from four seed squares near the corners. 25 flowers. The advanced side.</p></div>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="primary" id="btnStart">Start game</button></div>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" hidden>
+    <div class="turnbanner" id="banner"></div>
+    <div class="boardwrap" id="boardwrap">
+      <div class="board" id="board" aria-label="Vines board"></div>
+      <div class="soil" id="soil" aria-hidden="true"></div>
+    </div>
+    <div class="panel" id="handpanel" style="margin-top:12px">
+      <div class="controls" id="controls">
+        <button id="btnRot">Rotate ↻</button><button id="btnFlip">Flip ↔</button>
+        <button class="primary" id="btnPlace" disabled>Place</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="hand" id="hand" style="margin-top:10px"></div>
+      <div class="legend" style="margin-top:8px" id="hint"></div>
+    </div>
+  </section>
+
+  <!-- SCORES -->
+  <section class="panel" id="scores" hidden>
+    <h2 id="scoresTitle">Scores</h2>
+    <table class="score" id="scoreTable"></table>
+    <div class="pen" id="roundNote" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:12px"><button class="primary" id="btnContinue">Continue</button></div>
+  </section>
+
+  <details class="panel rules">
+    <summary>How to play</summary>
+    <p><b>Placing.</b> On your turn, place one card's piece (rotations and flips allowed). A piece is legal if it covers a bottom-row square (side A) or touches a seed square (side B), <i>or</i> if it edge-touches at least two other pieces and at least one of them is the same colour.</p>
+    <p><b>Running out.</b> If none of your cards can be placed anywhere, you are out for the round and keep your cards. Empty your hand and you remove your largest penalty token.</p>
+    <p><b>Scoring.</b> When nobody can play, each card left in hand costs 1 point plus 1 per uncovered flower of its colour (the five flowers in the soil can never be covered, which is where the 1 comes from). Any piece may cover any flower. Lowest total after all rounds wins.</p>
+    <p><b>Deck.</b> Seven pieces per colour (F, L, N, P, V, Y, Z) plus one extra blue V, which is removed with five players. Two players deal 9 each and draw from the pile after every placement.</p>
+  </details>
+</div>
+
+<div class="overlay" id="handoff" hidden><div class="box">
+  <h2 id="handoffTitle">Pass the device</h2>
+  <p id="handoffText"></p>
+  <button class="primary" id="btnReveal">Show my hand</button>
+</div></div>
+
+<script>
+(function(){
+'use strict';
+const COLS=20, ROWS=9, COLORS=['R','G','Y','O','B'], CNAME={R:'Red',G:'Green',Y:'Yellow',O:'Orange',B:'Blue'};
+const SHAPES={F:[[1,0],[2,0],[0,1],[1,1],[1,2]],L:[[0,0],[0,1],[0,2],[0,3],[1,3]],N:[[0,0],[0,1],[1,1],[1,2],[1,3]],
+  P:[[0,0],[1,0],[0,1],[1,1],[0,2]],V:[[0,0],[0,1],[0,2],[1,2],[2,2]],Y:[[0,0],[0,1],[0,2],[0,3],[1,1]],Z:[[0,0],[1,0],[1,1],[1,2],[2,2]]};
+// Boards: flowers as [col,row,colour] with row 1 at the bottom. Side A anchors on row 1; side B has seed squares.
+const BOARDS={
+  A:{name:'A · Trellis',seeds:[],flowers:[[4,9,'R'],[9,5,'R'],[13,3,'R'],[16,7,'R'],[17,1,'R'],[4,5,'G'],[8,7,'G'],[9,1,'G'],[17,9,'G'],[19,3,'G'],
+     [2,7,'Y'],[5,3,'Y'],[12,1,'Y'],[14,9,'Y'],[17,5,'Y'],[2,3,'O'],[7,9,'O'],[12,5,'O'],[16,3,'O'],[19,7,'O'],[4,1,'B'],[5,7,'B'],[8,3,'B'],[10,9,'B'],[13,7,'B']]},
+  B:{name:'B · Seeds',seeds:[[4,2],[17,2],[4,8],[17,8]],flowers:[[3,1,'R'],[7,8,'R'],[9,3,'R'],[13,1,'R'],[17,5,'R'],[3,9,'G'],[6,6,'G'],[8,1,'G'],[12,7,'G'],[19,6,'G'],
+     [1,6,'Y'],[11,2,'Y'],[13,5,'Y'],[15,8,'Y'],[20,4,'Y'],[2,4,'O'],[8,5,'O'],[9,9,'O'],[15,4,'O'],[18,9,'O'],[4,5,'B'],[6,2,'B'],[10,6,'B'],[13,9,'B'],[18,1,'B']]}
+};
+const PALETTE=['#c0392b','#2e8b57','#f2c230','#ee7a2e','#2f63b8','#8e5bb5'];
+const DEFAULT_NAMES=['Darren','Sam','Alex','Jordan','Casey','Riley'];
+
+// ---------- geometry ----------
+function orientations(cells){
+  const seen=new Map();
+  for(const flip of [false,true]){
+    let p=cells.map(([x,y])=>flip?[-x,y]:[x,y]);
+    for(let k=0;k<4;k++){
+      p=p.map(([x,y])=>[y,-x]);
+      const mx=Math.min(...p.map(c=>c[0])),my=Math.min(...p.map(c=>c[1]));
+      const n=p.map(([x,y])=>[x-mx,y-my]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+      seen.set(JSON.stringify(n),n);
+    }
+  }
+  return [...seen.values()];
+}
+const ORI={}; for(const s in SHAPES) ORI[s]=orientations(SHAPES[s]);
+const idx=(c,r)=>r*COLS+c; // c,r zero-based, r=0 bottom
+
+// ---------- state ----------
+let S=null;           // game state
+let ui={sel:null,ori:0,origin:null,lastPlaced:[]};
+let botTimer=null;
+
+function makeDeck(n){
+  const d=[]; for(const col of COLORS) for(const s in SHAPES) d.push({s,c:col});
+  if(n!==5) d.push({s:'V',c:'B'});
+  for(let i=d.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[d[i],d[j]]=[d[j],d[i]];}
+  return d;
+}
+function newBoard(side){
+  const b=BOARDS[side];
+  const cells=new Array(COLS*ROWS).fill(null);
+  const blocked=new Set(b.seeds.map(([c,r])=>idx(c-1,r-1)));
+  return {side,cells,blocked,flowers:b.flowers.map(([c,r,k])=>({i:idx(c-1,r-1),k})),nextId:1,pieces:{}};
+}
+function startRound(){
+  const n=S.players.length;
+  const deck=makeDeck(n);
+  const per=n===2?9:Math.floor(deck.length/n);
+  S.players.forEach((p,i)=>{p.hand=deck.slice(i*per,(i+1)*per);p.active=true;p.emptied=false;});
+  S.pile=n===2?deck.slice(2*per):[];
+  S.board=newBoard(S.side);
+  S.turn=(S.round-1)%n; S.lastPlayedBy=null;
+  ui.lastPlaced=[]; ui.sel=null; ui.origin=null;
+  S.phase='play';
+  beginTurn();
+}
+function cellsFor(shape,ori,c0,r0){return ORI[shape][ori].map(([x,y])=>[c0+x,r0+y]);}
+function legal(board,cells,color){
+  const n=cells.length; let anchor=false; const touched=new Map();
+  for(const [c,r] of cells){
+    if(c<0||c>=COLS||r<0||r>=ROWS) return false;
+    const i=idx(c,r); if(board.cells[i]||board.blocked.has(i)) return false;
+    if(board.side==='A'&&r===0) anchor=true;
+  }
+  const set=new Set(cells.map(([c,r])=>idx(c,r)));
+  for(const [c,r] of cells) for(const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const cc=c+dc,rr=r+dr; if(cc<0||cc>=COLS||rr<0||rr>=ROWS) continue;
+    const i=idx(cc,rr); if(set.has(i)) continue;
+    if(board.side==='B'&&board.blocked.has(i)) anchor=true;
+    const p=board.cells[i]; if(p) touched.set(p.id,p.c);
+  }
+  if(anchor) return true;
+  if(touched.size<2) return false;
+  for(const col of touched.values()) if(col===color) return true;
+  return false;
+}
+function allPlacements(board,card){
+  const out=[]; const os=ORI[card.s];
+  for(let o=0;o<os.length;o++){
+    const w=Math.max(...os[o].map(c=>c[0])),h=Math.max(...os[o].map(c=>c[1]));
+    for(let r=0;r+h<ROWS;r++) for(let c=0;c+w<COLS;c++){
+      const cells=cellsFor(card.s,o,c,r);
+      if(legal(board,cells,card.c)) out.push({o,c,r,cells});
+    }
+  }
+  return out;
+}
+function hasAnyMove(p){return p.hand.some(card=>allPlacements(S.board,card).length>0);}
+function place(player,card,cells){
+  const b=S.board,id=b.nextId++;
+  b.pieces[id]={c:card.c,s:card.s,by:player.name};
+  for(const [c,r] of cells) b.cells[idx(c,r)]={id,c:card.c};
+  player.hand.splice(player.hand.indexOf(card),1);
+  ui.lastPlaced=cells.map(([c,r])=>idx(c,r));
+  if(S.players.length===2&&S.pile.length) player.hand.push(S.pile.pop());
+  if(player.hand.length===0){player.active=false;player.emptied=true;}
+}
+function openFlowers(){const b=S.board,m={R:0,G:0,Y:0,O:0,B:0};for(const f of b.flowers) if(!b.cells[f.i]) m[f.k]++;return m;}
+function tokensFor(n){const t=[];for(const v of [10,5,1]) while(n>=v){t.push(v);n-=v;}return t;}
+function endRound(){
+  const open=openFlowers(); S.roundResults=[];
+  for(const p of S.players){
+    const pts=p.hand.reduce((a,card)=>a+1+open[card.c],0);
+    p.tokens.push(...tokensFor(pts)); let bonus=0;
+    if(p.emptied&&p.tokens.length){const mx=Math.max(...p.tokens);p.tokens.splice(p.tokens.indexOf(mx),1);bonus=mx;}
+    S.roundResults.push({name:p.name,cards:p.hand.length,pts,bonus,total:p.tokens.reduce((a,b)=>a+b,0)});
+  }
+  S.phase=S.round>=S.players.length?'gameover':'roundend';
+  showScores();
+}
+
+// ---------- turn flow ----------
+function beginTurn(){
+  const n=S.players.length; let guard=0;
+  while(S.players.some(p=>p.active)){
+    const p=S.players[S.turn];
+    if(p.active&&!hasAnyMove(p)) p.active=false;
+    if(p.active) break;
+    S.turn=(S.turn+1)%n; if(++guard>n) break;
+  }
+  if(!S.players.some(p=>p.active)){endRound();return;}
+  const p=S.players[S.turn];
+  ui.sel=null;ui.origin=null;ui.ori=0;
+  saveLocal();
+  if(p.bot){render();S.hidden=true;botTimer=setTimeout(botMove,650);}
+  else{
+    const humans=S.players.filter(q=>!q.bot).length;
+    if(humans>1){S.hidden=true;render();showHandoff(p);}else{S.hidden=false;render();}
+  }
+}
+function afterPlace(){
+  S.turn=(S.turn+1)%S.players.length;
+  beginTurn();
+}
+function showHandoff(p){
+  document.getElementById('handoffTitle').textContent='Pass the device to '+p.name;
+  document.getElementById('handoffText').textContent=p.name+', tap below when only you can see the screen.';
+  const ov=document.getElementById('handoff'); ov.hidden=false; document.getElementById('btnReveal').focus();
+}
+document.getElementById('btnReveal').onclick=()=>{document.getElementById('handoff').hidden=true;S.hidden=false;render();};
+
+// ---------- bots ----------
+function botMove(){
+  const p=S.players[S.turn]; if(!p||!p.active||!p.bot) return;
+  const b=S.board; const open=b.flowers.filter(f=>!b.cells[f.i]);
+  const held={R:0,G:0,Y:0,O:0,B:0}; for(const c of p.hand) held[c.c]++;
+  // what others probably hold: deck colour counts minus what is on the board minus my hand
+  const onBoard={R:0,G:0,Y:0,O:0,B:0}; for(const id in b.pieces) onBoard[b.pieces[id].c]++;
+  const total={R:7,G:7,Y:7,O:7,B:S.players.length===5?7:8};
+  const others={}; for(const k of COLORS) others[k]=Math.max(0,total[k]-onBoard[k]-held[k]);
+  let best=null;
+  const optionsPerCard=p.hand.map(card=>allPlacements(b,card));
+  const minOpts=Math.min(...optionsPerCard.map(o=>o.length||1e9));
+  p.hand.forEach((card,ci)=>{
+    for(const pl of optionsPerCard[ci]){
+      const set=new Set(pl.cells.map(([c,r])=>idx(c,r)));
+      let adj=0,walls=0;
+      for(const [c,r] of pl.cells) for(const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const cc=c+dc,rr=r+dr; if(cc<0||cc>=COLS||rr<0||rr>=ROWS){walls++;continue;}
+        const i=idx(cc,rr); if(set.has(i)) continue; if(b.cells[i]||b.blocked.has(i)) adj++;
+      }
+      let score=adj+walls+Math.random()*0.5+4*minOpts/Math.max(1,optionsPerCard[ci].length);
+      for(const f of open){
+        if(set.has(f.i)){ // covering a flower
+          score+=2.0*held[f.k];
+          if(p.style==='jerk') score-=1.5*others[f.k]/(S.players.length-1);
+        } else if(p.style==='jerk'&&others[f.k]>0&&held[f.k]===0){
+          // sit next to flowers of colours others hold, making them harder to cover
+          const fc=f.i%COLS,fr=Math.floor(f.i/COLS);
+          for(const [c,r] of pl.cells) if(Math.abs(c-fc)+Math.abs(r-fr)===1) score+=0.8;
+        }
+      }
+      if(!best||score>best.score) best={score,card,cells:pl.cells};
+    }
+  });
+  if(!best){p.active=false;afterPlace();return;}
+  place(p,best.card,best.cells);
+  S.lastPlayedBy=p.name;
+  render(); setTimeout(afterPlace,500);
+}
+
+// ---------- rendering ----------
+function flowerSVG(k,size){
+  const col=getComputedStyle(document.documentElement).getPropertyValue('--'+k).trim()||'#888';
+  const cen=k==='Y'?'#a5561e':'#f6dc8a';
+  let petals='';for(let i=0;i<5;i++){const a=90+i*72;petals+=`<ellipse cx="0" cy="-5.2" rx="3.4" ry="5" transform="rotate(${a})" fill="${col}" stroke="#2f2a24" stroke-width=".9"/>`;}
+  return `<svg viewBox="-10 -10 20 20" ${size?`width="${size}" height="${size}"`:''} aria-label="${CNAME[k]} flower"><g>${petals}<circle r="2.8" fill="${cen}" stroke="#2f2a24" stroke-width=".9"/></g></svg>`;
+}
+function pieceSVG(card,sel){
+  const o=ORI[card.s][0]; const w=Math.max(...o.map(c=>c[0]))+1,h=Math.max(...o.map(c=>c[1]))+1;
+  const col=`var(--${card.c})`;
+  const rects=o.map(([x,y])=>`<rect x="${x*10+0.6}" y="${(h-1-y)*10+0.6}" width="8.8" height="8.8" rx="1.2" fill="${col}" stroke="#2f2a24" stroke-width=".7"/>`).join('');
+  return `<svg viewBox="${-(5-w)*5} ${-(5-h)*5} 50 50" aria-label="${CNAME[card.c]} ${card.s}">${rects}</svg>`;
+}
+const boardEl=document.getElementById('board'), soilEl=document.getElementById('soil');
+let cellEls=[];
+function buildBoard(){
+  boardEl.innerHTML='';cellEls=[];
+  for(let r=ROWS-1;r>=0;r--) for(let c=0;c<COLS;c++){
+    const d=document.createElement('div');d.className='cell';d.dataset.i=idx(c,r);
+    d.addEventListener('click',onCellClick);
+    boardEl.appendChild(d);cellEls[idx(c,r)]=d;
+  }
+  soilEl.innerHTML=COLORS.map(k=>flowerSVG(k)).join('');
+}
+function render(){
+  const inGame=S&&S.phase==='play';
+  document.getElementById('setup').hidden=!!S;
+  document.getElementById('game').hidden=!inGame;
+  document.getElementById('scores').hidden=!(S&&S.phase!=='play');
+  document.getElementById('btnNew').hidden=!S; document.getElementById('btnScores').hidden=!inGame;
+  if(!S) return;
+  const b=S.board; const open=openFlowers(); const fl={};for(const f of b.flowers) fl[f.i]=f.k;
+  // ghost
+  let ghost=null,ghostOK=false,ghostCol=null;
+  const p=S.players[S.turn];
+  if(inGame&&ui.sel!==null&&ui.origin!==null&&!S.hidden&&p&&!p.bot){
+    const card=p.hand[ui.sel]; if(card){const cells=cellsFor(card.s,ui.ori%ORI[card.s].length,ui.origin[0],ui.origin[1]);
+      ghost=new Set(cells.filter(([c,r])=>c>=0&&c<COLS&&r>=0&&r<ROWS).map(([c,r])=>idx(c,r))); ghostOK=legal(b,cells,card.c); ghostCol=card.c;}
+  }
+  for(let i=0;i<COLS*ROWS;i++){
+    const d=cellEls[i]; const r=Math.floor(i/COLS);
+    d.className='cell'+(b.side==='A'&&r===0?' anchor':'')+(b.blocked.has(i)?' seed':'');
+    let h='';
+    const pc=b.cells[i];
+    if(pc) h+=`<div class="piece${ui.lastPlaced.includes(i)?' new':''}" style="background:var(--${pc.c})"></div>`;
+    else if(fl[i]) h+=`<div class="flower">${flowerSVG(fl[i])}</div>`;
+    if(ghost&&ghost.has(i)) h+=`<div class="ghost${ghostOK?'':' bad'}" style="background:var(--${ghostCol})"></div>`;
+    d.innerHTML=h;
+  }
+  // banner
+  const bn=document.getElementById('banner');
+  if(inGame){
+    const sw=`<span class="swatch" style="background:${p.color}"></span>`;
+    const left=S.players.map(q=>`${q.name} ${q.hand.length}`).join(' · ');
+    bn.innerHTML=`${sw}<b>${p.name}'s turn</b> <span class="legend">Round ${S.round} of ${S.players.length} · ${BOARDS[S.side].name} · cards: ${left}</span>`;
+  }
+  // hand
+  const hand=document.getElementById('hand'),st=document.getElementById('status'),hint=document.getElementById('hint');
+  const ctl=document.getElementById('controls');
+  if(inGame&&p.bot){hand.innerHTML='';st.textContent=p.name+' is thinking…';hint.textContent='';ctl.querySelectorAll('button').forEach(x=>x.disabled=true);return;}
+  if(inGame&&S.hidden){hand.innerHTML='';st.textContent='';hint.textContent='';return;}
+  if(inGame){
+    ctl.querySelectorAll('button').forEach(x=>x.disabled=false);
+    hand.innerHTML=p.hand.map((card,i)=>{const n=allPlacements(b,card).length;return `<button class="cardbtn${ui.sel===i?' sel':''}${n?'':' dead'}" data-i="${i}" title="${CNAME[card.c]} ${card.s} — ${n} legal spot${n===1?'':'s'}">${pieceSVG(card)}</button>`;}).join('');
+    hand.querySelectorAll('.cardbtn').forEach(x=>x.onclick=()=>{ui.sel=+x.dataset.i;ui.ori=0;ui.origin=null;render();});
+    const flowersTxt=COLORS.map(k=>`${CNAME[k]} ${open[k]}`).join(', ');
+    document.getElementById('btnPlace').disabled=!ghostOK;
+    if(ui.sel===null){st.textContent='Pick a card.';hint.textContent='Open flowers — '+flowersTxt+'. Faded cards have no legal spot right now.';}
+    else if(ui.origin===null){st.textContent='Tap a square for the piece\'s bottom-left corner.';hint.textContent='Rotate or flip first if you like; the ghost shows where it would land.';}
+    else{st.textContent=ghostOK?'Legal. Tap Place or tap the ghost again.':'Not legal here — it must cover an anchor/touch a seed, or touch two pieces with one matching colour.';hint.textContent='Open flowers — '+flowersTxt+'.';}
+  }
+}
+function onCellClick(e){
+  if(!S||S.phase!=='play'||S.hidden) return;
+  const p=S.players[S.turn]; if(p.bot||ui.sel===null) return;
+  const i=+e.currentTarget.dataset.i,c=i%COLS,r=Math.floor(i/COLS);
+  const card=p.hand[ui.sel]; const o=ui.ori%ORI[card.s].length;
+  if(ui.origin){ // tapping inside a legal ghost places it
+    const cells=cellsFor(card.s,o,ui.origin[0],ui.origin[1]);
+    if(cells.some(([cc,rr])=>cc===c&&rr===r)&&legal(S.board,cells,card.c)){doPlace();return;}
+  }
+  ui.origin=[c,r]; render();
+}
+function doPlace(){
+  const p=S.players[S.turn]; const card=p.hand[ui.sel]; if(!card) return;
+  const cells=cellsFor(card.s,ui.ori%ORI[card.s].length,ui.origin[0],ui.origin[1]);
+  if(!legal(S.board,cells,card.c)) return;
+  place(p,card,cells); S.lastPlayedBy=p.name; afterPlace();
+}
+document.getElementById('btnPlace').onclick=doPlace;
+document.getElementById('btnRot').onclick=()=>{ui.ori++;render();};
+document.getElementById('btnFlip').onclick=()=>{ // find the mirrored orientation
+  const p=S.players[S.turn];const card=p&&p.hand[ui.sel];if(!card)return;
+  const os=ORI[card.s];const cur=os[ui.ori%os.length];const w=Math.max(...cur.map(c=>c[0]));
+  const mirrored=JSON.stringify(cur.map(([x,y])=>[w-x,y]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]));
+  const j=os.findIndex(o=>JSON.stringify(o)===mirrored); if(j>=0) ui.ori=j; render();};
+document.addEventListener('keydown',e=>{if(!S||S.phase!=='play')return; if(e.key==='r'||e.key==='R')document.getElementById('btnRot').click(); if(e.key==='f'||e.key==='F')document.getElementById('btnFlip').click(); if(e.key==='Enter')doPlace();});
+
+// ---------- scores ----------
+function showScores(){
+  document.getElementById('game').hidden=true; const sc=document.getElementById('scores'); sc.hidden=false;
+  document.getElementById('scoresTitle').textContent=S.phase==='gameover'?'Final scores':`Round ${S.round} scores`;
+  const open=openFlowers();
+  let h='<tr><th>Player</th><th class="num">Cards left</th><th class="num">This round</th><th>Tokens</th><th class="num">Total</th></tr>';
+  const rows=[...S.roundResults].sort((a,b)=>a.total-b.total);
+  for(const r of rows){const p=S.players.find(q=>q.name===r.name);
+    h+=`<tr><td><span class="swatch" style="display:inline-block;vertical-align:middle;width:12px;height:12px;background:${p.color};margin-right:6px"></span>${r.name}</td><td class="num">${r.cards}</td><td class="num">+${r.pts}${r.bonus?` −${r.bonus} (empty hand)`:''}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${r.total}</b></td></tr>`;}
+  document.getElementById('scoreTable').innerHTML=h;
+  document.getElementById('roundNote').textContent='Flowers left open — '+COLORS.map(k=>`${CNAME[k]} ${open[k]}`).join(', ')+'. A leftover card costs 1 plus the open flowers of its colour.';
+  const btn=document.getElementById('btnContinue'); btn.textContent=S.phase==='gameover'?`${rows[0].name} wins · play again`:'Next round';
+  saveLocal();
+}
+document.getElementById('btnContinue').onclick=()=>{
+  if(S.phase==='gameover'){S=null;clearLocal();render();return;}
+  S.round++; startRound();
+};
+document.getElementById('btnScores').onclick=()=>{ // peek at standings mid-round
+  const sc=document.getElementById('scores'); const wasHidden=sc.hidden;
+  if(wasHidden){document.getElementById('scoresTitle').textContent='Standings';
+    let h='<tr><th>Player</th><th class="num">Cards in hand</th><th>Tokens</th><th class="num">Total</th></tr>';
+    for(const p of S.players) h+=`<tr><td>${p.name}</td><td class="num">${p.hand.length}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${p.tokens.reduce((a,b)=>a+b,0)}</b></td></tr>`;
+    document.getElementById('scoreTable').innerHTML=h; document.getElementById('roundNote').textContent='';
+    document.getElementById('btnContinue').textContent='Back to the board'; sc.hidden=false; document.getElementById('game').hidden=true;
+    document.getElementById('btnContinue').onclick=()=>{sc.hidden=true;document.getElementById('game').hidden=false;document.getElementById('btnContinue').onclick=continueHandler;};
+  }
+};
+const continueHandler=document.getElementById('btnContinue').onclick;
+document.getElementById('btnNew').onclick=()=>{if(botTimer)clearTimeout(botTimer);S=null;clearLocal();render();};
+
+// ---------- setup ----------
+const npl=document.getElementById('nplayers'),plist=document.getElementById('playerList');
+let side='A';
+function renderSetup(){
+  const n=+npl.value; let h='';
+  for(let i=0;i<n;i++){
+    const prev=plist.querySelector(`#pname${i}`); const prevKind=plist.querySelector(`#pkind${i}`);
+    h+=`<div class="player-row"><span class="swatch" style="background:${PALETTE[i]}"></span>
+      <input type="text" id="pname${i}" value="${prev?prev.value.replace(/"/g,'&quot;'):DEFAULT_NAMES[i]}" aria-label="Player ${i+1} name">
+      <select id="pkind${i}" aria-label="Player ${i+1} type"><option value="human"${!prevKind||prevKind.value==='human'?' selected':''}>Human</option><option value="careful"${prevKind&&prevKind.value==='careful'?' selected':''}>Bot · careful</option><option value="jerk"${prevKind&&prevKind.value==='jerk'?' selected':''}>Bot · jerk</option></select></div>`;
+  }
+  plist.innerHTML=h;
+}
+npl.onchange=renderSetup; renderSetup();
+for(const s of ['A','B']) document.getElementById('side'+s).onclick=document.getElementById('side'+s).onkeydown=e=>{if(e.type==='keydown'&&e.key!=='Enter'&&e.key!==' ')return;side=s;document.getElementById('sideA').classList.toggle('sel',s==='A');document.getElementById('sideB').classList.toggle('sel',s==='B');};
+document.getElementById('btnStart').onclick=()=>{
+  const n=+npl.value; const players=[];
+  for(let i=0;i<n;i++){const kind=document.getElementById('pkind'+i).value;
+    players.push({name:(document.getElementById('pname'+i).value.trim()||DEFAULT_NAMES[i]).slice(0,16),bot:kind!=='human',style:kind,color:PALETTE[i],tokens:[],hand:[],active:true,emptied:false});}
+  S={players,side,round:1,phase:'play'};
+  startRound();
+};
+
+// ---------- persistence (per device convenience) ----------
+function saveLocal(){try{const copy={...S,board:{...S.board,blocked:[...S.board.blocked]}};localStorage.setItem('vines-game',JSON.stringify(copy));}catch(e){}}
+function clearLocal(){try{localStorage.removeItem('vines-game');}catch(e){}}
+function loadLocal(){try{const raw=localStorage.getItem('vines-game');if(!raw)return false;const g=JSON.parse(raw);g.board.blocked=new Set(g.board.blocked);S=g;return true;}catch(e){return false;}}
+
+buildBoard();
+if(loadLocal()&&S&&S.phase==='play'){S.hidden=false;ui.lastPlaced=[];render();const p=S.players[S.turn];if(p.bot)botTimer=setTimeout(botMove,650);}
+else if(S){showScores();}
+else render();
+})();
+</script>
+
+</body>
+</html>
