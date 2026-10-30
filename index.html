@@ -128,7 +128,7 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
     <div id="tab-local" style="margin-top:12px">
       <div class="row"><label for="nplayers">Players</label>
         <select id="nplayers"><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select>
-        <span class="legend">Pass the device between humans; bots play themselves.</span></div>
+        <span class="legend">You plus bots by default. Switch any seat to Human to pass the device around. Careful bots cover their own flowers; jerk bots block yours.</span></div>
       <div class="players" id="playerList" style="margin-top:10px"></div>
     </div>
     <div id="tab-host" style="margin-top:12px" hidden>
@@ -478,7 +478,7 @@ class HostSession{
   constructor(side,N,name){
     this.kind='host';this.side=side;this.N=N;this.name=name||'Host';this.seat=0;
     this.seats=[{name:this.name,bot:false,token:'host',connected:true,last:0}];
-    for(let i=1;i<N;i++) this.seats.push({name:null,bot:true,token:null,connected:false,last:0});
+    for(let i=1;i<N;i++) this.seats.push({name:null,bot:true,style:'careful',token:null,connected:false,last:0});
     this.runner=new GameRunner(); this.runner.onUpdate(()=>{this.broadcastViews();this.cb&&this.cb();}); this.started=false;
   }
   onUpdate(cb){this.cb=cb;} onLobby(cb){this.lobbyCb=cb;}
@@ -505,7 +505,7 @@ class HostSession{
         if(this.started){this.replyRaw(tok,{t:'rejected',reason:'The game has already started.'});return;}
         seat=this.seats.findIndex(s=>s.bot&&!s.token);
         if(seat<0){this.replyRaw(tok,{t:'rejected',reason:'The table is full.'});return;}
-        this.seats[seat]={name,bot:false,token:tok,connected:true,last:Date.now()};
+        this.seats[seat]={name,bot:false,style:'careful',token:tok,connected:true,last:Date.now()};
       } else {this.seats[seat].connected=true;this.seats[seat].last=Date.now();this.seats[seat].name=name;}
       this.sendTo(seat,{t:'welcome',seat,code:this.code}); this.pushLobby();
       if(this.started) this.sendTo(seat,{t:'view',view:this.runner.view(seat)});
@@ -525,12 +525,13 @@ class HostSession{
     if(this.started||from===to||from<0||to<0||from>=this.N||to>=this.N)return;
     const a=this.seats[from],b=this.seats[to];this.seats[to]=a;this.seats[from]=b;this.seat=this.hostSeat();this.pushLobby();
   }
-  lobbyState(){return{code:this.code,side:this.side,N:this.N,started:this.started,relay:this.broker&&this.broker.name,seats:this.seats.map(s=>({name:s.bot?null:s.name,bot:s.bot,connected:s.connected}))};}
+  setBotStyle(i,style){const s=this.seats[i];if(this.started||!s||!s.bot)return;s.style=style==='jerk'?'jerk':'careful';this.pushLobby();}
+  lobbyState(){return{code:this.code,side:this.side,N:this.N,started:this.started,relay:this.broker&&this.broker.name,seats:this.seats.map(s=>({name:s.bot?null:s.name,bot:s.bot,style:s.style||'careful',connected:s.connected}))};}
   pushLobby(){const st=this.lobbyState();this.seats.forEach((s,i)=>{if(!s.bot&&s.token!=='host')this.sendTo(i,{t:'lobby',state:st,seat:i});});this.lobbyCb&&this.lobbyCb(st);}
   startGame(){
     if(this.started)return; this.started=true;
     const names=['Ivy','Fern','Moss','Sage','Basil','Clover']; let bi=0;
-    const players=this.seats.map(s=>s.bot?{name:names[bi++%names.length]+' (bot)',bot:true,style:bi%2?'careful':'jerk'}:{name:s.name,bot:false});
+    const players=this.seats.map(s=>s.bot?{name:names[bi++%names.length]+' (bot)',bot:true,style:s.style||'careful'}:{name:s.name,bot:false});
     this.pushLobby(); this.runner.start({side:this.side,players});
   }
   broadcastViews(){this.seats.forEach((s,i)=>{if(!s.bot&&s.token!=='host')this.sendTo(i,{t:'view',view:this.runner.view(i)});});}
@@ -606,10 +607,12 @@ function renderSetup(){
   const n=+npl.value; let h='';
   for(let i=0;i<n;i++){
     const prev=plist.querySelector('#pname'+i),prevKind=plist.querySelector('#pkind'+i);
-    const val=prev?prev.value:(i===0?($('myname').value.trim()||DEFAULT_NAMES[0]):DEFAULT_NAMES[i]);
+    const kind=prevKind?prevKind.value:(i===0?'human':'careful');
+    const BOTN=['Ivy','Fern','Moss','Sage','Basil','Clover'];
+    const val=prev?prev.value:(i===0?($('myname').value.trim()||DEFAULT_NAMES[0]):BOTN[i-1]);
     h+=`<div class="player-row"><span class="swatch" style="background:${PALETTE[i]}"></span>
       <input type="text" id="pname${i}" value="${esc(val)}" maxlength="16" aria-label="Player ${i+1} name">
-      <select id="pkind${i}" aria-label="Player ${i+1} type"><option value="human"${!prevKind||prevKind.value==='human'?' selected':''}>Human</option><option value="careful"${prevKind&&prevKind.value==='careful'?' selected':''}>Bot · careful</option><option value="jerk"${prevKind&&prevKind.value==='jerk'?' selected':''}>Bot · jerk</option></select></div>`;
+      <select id="pkind${i}" aria-label="Player ${i+1} type"><option value="human"${kind==='human'?' selected':''}>Human</option><option value="careful"${kind==='careful'?' selected':''}>Bot · careful</option><option value="jerk"${kind==='jerk'?' selected':''}>Bot · jerk</option></select></div>`;
   }
   plist.innerHTML=h;
 }
@@ -655,17 +658,20 @@ function renderLobby(st){
   $('lobbyStatus').textContent=`${BOARDS[st.side].name} · ${st.N} seats`+(st.relay?' · via the '+st.relay+' relay':'')+(session.kind==='guest'?' · waiting for the host to start':'');
   const mySeat=session.seat; const humans=st.seats.map((s,i)=>({i,name:s.name})).filter(x=>!st.seats[x.i].bot);
   $('lobbySeats').innerHTML=st.seats.map((s,i)=>{
-    const who=s.bot?`<span class="muted">Open seat · a bot will sit here</span>`:`<strong>${esc(s.name)}</strong>${i===mySeat?' <span class="muted">(you)</span>':''}${s.connected?'':' <span class="muted">· reconnecting…</span>'}`;
+    const who=s.bot?`<span class="muted">Open seat · a ${s.style==='jerk'?'jerk':'careful'} bot will sit here</span>`:`<strong>${esc(s.name)}</strong>${i===mySeat?' <span class="muted">(you)</span>':''}${s.connected?'':' <span class="muted">· reconnecting…</span>'}`;
     let ctl='';
-    if(session.kind==='host'&&!st.started) ctl=`<select data-seatsel="${i}" aria-label="Who sits in seat ${i+1}"><option value="bot"${s.bot?' selected':''}>Bot</option>${humans.map(h=>`<option value="${h.i}"${h.i===i?' selected':''}>${esc(h.name)}</option>`).join('')}</select>`;
+    if(session.kind==='host'&&!st.started) ctl=`<select data-seatsel="${i}" aria-label="Who sits in seat ${i+1}"><option value="bot-careful"${s.bot&&s.style!=='jerk'?' selected':''}>Bot · careful</option><option value="bot-jerk"${s.bot&&s.style==='jerk'?' selected':''}>Bot · jerk</option>${humans.map(h=>`<option value="${h.i}"${h.i===i?' selected':''}>${esc(h.name)}</option>`).join('')}</select>`;
     else if(session.kind==='guest'&&!st.started&&s.bot) ctl=`<button data-sit="${i}">Sit here</button>`;
     return `<div class="seat"><div><span class="swatch" style="display:inline-block;vertical-align:middle;width:12px;height:12px;background:${PALETTE[i]};margin-right:8px"></span>${who}</div>${ctl}</div>`;
   }).join('');
   document.querySelectorAll('[data-seatsel]').forEach(el=>el.onchange=()=>{const to=+el.dataset.seatsel,v=el.value;
-    if(v==='bot'){const bot=st.seats.findIndex(x=>x.bot);if(bot>=0&&!st.seats[to].bot)session.moveSeat(to,bot);else renderLobby(session.lobbyState());}else session.moveSeat(+v,to);});
+    if(v.startsWith('bot')){const style=v.slice(4);
+      if(st.seats[to].bot){session.setBotStyle(to,style);return;}
+      const bot=st.seats.findIndex(x=>x.bot); if(bot>=0){session.moveSeat(to,bot);session.setBotStyle(to,style);} else renderLobby(session.lobbyState());}
+    else session.moveSeat(+v,to);});
   document.querySelectorAll('[data-sit]').forEach(el=>el.onclick=()=>session.sit(+el.dataset.sit));
   $('btnStartTable').hidden=!(session.kind==='host'&&!st.started);
-  $('lobbyHint').textContent=session.kind==='host'?'Share the code. Use the menus to seat people; open seats become bots when you start. Friends can rejoin their own seat if they refresh.':'Tap "Sit here" on an open seat to move; the host can also move you.';
+  $('lobbyHint').textContent=session.kind==='host'?'Share the code, or just start — open seats are played by bots, so you can host a game against bots alone. Use the menus to seat people or pick careful or jerk bots. Friends can rejoin their own seat if they refresh.':'Tap "Sit here" on an open seat to move; the host can also move you.';
 }
 $('btnStartTable').onclick=()=>{session.startGame();};
 
