@@ -12,7 +12,7 @@
   --paper:#f6f1e3; --paper-2:#efe7d2; --ink:#2f2a24; --ink-soft:#6a5f50; --grid:#cdc4a5;
   --soil:#7e5c3c; --soil-d:#5e432a; --vine:#5e8c4a; --leaf:#9fc08a; --accent:#5e8c4a; --accent-ink:#fff;
   --card:#fffdf7; --card-edge:#d9cfb4; --bad:#c0392b; --good:#2e8b57;
-  --R:#c0392b; --G:#2e8b57; --Y:#f2c230; --O:#ee7a2e; --B:#2f63b8;
+  --R:#c0392b; --G:#2e8b57; --Y:#f2c230; --O:#ee7a2e; --B:#2f63b8; --outline:#1d1a16;
   --display:"Baloo 2","Trebuchet MS",sans-serif; --body:"Nunito","Segoe UI",system-ui,sans-serif;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
@@ -62,9 +62,9 @@ input.code{font-family:var(--display);font-size:22px;letter-spacing:.18em;text-t
 .seat{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1.5px solid var(--card-edge);border-radius:10px;padding:8px 12px}
 .muted{color:var(--ink-soft)}
 /* board */
-.boardwrap{display:flex;flex-direction:column;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px}
+.boardwrap{--cs:clamp(16px,calc((100vw - 36px)/20),44px);display:flex;flex-direction:column;align-items:flex-start;gap:0;overflow-x:auto;padding-bottom:4px}
 .boardwrap>*{margin-inline:auto}
-.board{--cs:clamp(24px,calc((100vw - 40px)/20),44px);display:grid;grid-template-columns:repeat(20,var(--cs));grid-auto-rows:var(--cs);
+.board{display:grid;grid-template-columns:repeat(20,var(--cs));grid-auto-rows:var(--cs);
   gap:0;background:var(--paper);border:1.5px solid var(--soil-d);position:relative;touch-action:manipulation}
 .cell{border:0.5px solid var(--grid);position:relative;box-sizing:border-box}
 .cell.anchor{background:linear-gradient(transparent 70%,rgba(126,92,60,.18) 70%)}
@@ -72,8 +72,11 @@ input.code{font-family:var(--display);font-size:22px;letter-spacing:.18em;text-t
 .cell.seed::after{content:"";position:absolute;left:38%;bottom:22%;width:24%;height:56%;background:
   radial-gradient(ellipse at 20% 40%,var(--leaf) 0 42%,transparent 44%),radial-gradient(ellipse at 80% 60%,var(--leaf) 0 42%,transparent 44%);
   border-left:2px solid var(--vine)}
-.cell .piece{position:absolute;inset:1.5px;border-radius:3px;opacity:.95}
-.cell .piece.new{box-shadow:0 0 0 2px var(--ink) inset}
+.cell .piece{position:absolute;inset:-0.5px;box-sizing:border-box;border:0 solid var(--outline)}
+.cell .piece.new{box-shadow:inset 0 0 0 3px rgba(255,255,255,.55)}
+.events{font-size:13px;color:var(--ink-soft);min-height:1.3em;margin-top:4px}
+.events b{color:var(--ink)}
+.outnote{background:var(--card);border:1.5px solid var(--bad);border-radius:10px;padding:8px 12px;font-weight:700}
 .cell .flower{position:absolute;inset:18%;pointer-events:none}
 .cell .ghost{position:absolute;inset:1px;border-radius:3px;opacity:.55;outline:2px dashed var(--ink)}
 .cell .ghost.bad{outline-color:var(--bad);background:repeating-linear-gradient(45deg,rgba(192,57,43,.5) 0 4px,transparent 4px 8px)!important}
@@ -158,6 +161,7 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
   <!-- GAME -->
   <section id="game" hidden>
     <div class="turnbanner" id="banner"></div>
+    <div class="events" id="events"></div>
     <div class="boardwrap" id="boardwrap">
       <div class="board" id="board" aria-label="Vines board"></div>
       <div class="soil" id="soil" aria-hidden="true"></div>
@@ -186,7 +190,7 @@ details summary{cursor:pointer;font-weight:700;font-family:var(--display);font-s
     <p><b>Placing.</b> On your turn, place one card's piece (rotations and flips allowed). A piece is legal if it covers a bottom-row square (side A) or touches a seed square (side B), <i>or</i> if it edge-touches at least two other pieces and at least one of them is the same colour.</p>
     <p><b>Running out.</b> If none of your cards can be placed anywhere, you are out for the round and keep your cards. Empty your hand and you remove your largest penalty token.</p>
     <p><b>Scoring.</b> When nobody can play, each card left in hand costs 1 point plus 1 per uncovered flower of its colour (the five flowers in the soil can never be covered, which is where the 1 comes from). Any piece may cover any flower. Lowest total after all rounds wins.</p>
-    <p><b>Deck.</b> Seven pieces per colour (F, L, N, P, V, Y, Z) plus one extra blue V, which is removed with five players. Two players deal 9 each and draw from the pile after every placement.</p>
+    <p><b>Deck.</b> Seven pieces per colour (F, L, N, P, V, Y, Z) plus one extra blue V, which is removed with five players. Two players deal 5 each and draw a card after every placement; the round ends as soon as one player can't play, and everyone scores the cards left in hand.</p>
     <p><b>Online tables.</b> The host's device runs the game; friends join by entering the five-letter code. Messages go through a public relay, so everyone just needs the page open. If you refresh, rejoin with the same code and name to get your seat back.</p>
   </details>
 </div>
@@ -278,14 +282,14 @@ function tokensFor(n){const t=[];for(const v of [10,5,1]) while(n>=v){t.push(v);
 // players: [{name,bot,style}] ; g.phase: 'play' | 'roundend' | 'gameover'
 function newGame({side,players}){
   const g={side,players:players.map((p,i)=>({name:p.name,bot:!!p.bot,style:p.style||'careful',seat:i,tokens:[],hand:[],active:true,emptied:false})),
-    round:1,phase:'play',board:null,turn:0,pile:[],lastPlaced:[],lastBy:null,roundResults:null,log:[]};
+    round:1,phase:'play',board:null,turn:0,pile:[],lastPlaced:[],lastBy:null,roundResults:null,events:[],evn:0};
   startRound(g); return g;
 }
 function startRound(g){
-  const n=g.players.length, deck=makeDeck(n), per=n===2?9:Math.floor(deck.length/n);
+  const n=g.players.length, deck=makeDeck(n), per=n===2?5:Math.floor(deck.length/n);
   g.players.forEach((p,i)=>{p.hand=deck.slice(i*per,(i+1)*per);p.active=true;p.emptied=false;});
   g.pile=n===2?deck.slice(2*per):[];
-  g.board=newBoard(g.side); g.turn=(g.round-1)%n; g.lastPlaced=[]; g.lastBy=null; g.phase='play'; g.roundResults=null;
+  g.board=newBoard(g.side); g.turn=(g.round-1)%n; g.lastPlaced=[]; g.lastBy=null; g.phase='play'; g.roundResults=null; g.events=[];
   advanceTurn(g,false);
 }
 // Skip players with no legal move; end the round when nobody can play.
@@ -294,7 +298,10 @@ function advanceTurn(g,step){
   if(step) g.turn=(g.turn+1)%n;
   for(let guard=0;guard<n;guard++){
     const p=g.players[g.turn];
-    if(p.active&&!hasAnyMove(g.board,p.hand)) p.active=false;
+    if(p.active&&!hasAnyMove(g.board,p.hand)){
+      p.active=false; g.events.push({t:'out',seat:p.seat,cards:p.hand.length,n:++g.evn});
+      if(n===2){endRound(g);return;}   // 2-player variant: the round ends as soon as one player can't play
+    }
     if(p.active) return;
     g.turn=(g.turn+1)%n;
   }
@@ -306,7 +313,7 @@ function place(g,player,card,cells){
   player.hand.splice(player.hand.indexOf(card),1);
   g.lastPlaced=cells.map(([c,r])=>idx(c,r)); g.lastBy=player.seat;
   if(g.players.length===2&&g.pile.length) player.hand.push(g.pile.pop());
-  if(player.hand.length===0){player.active=false;player.emptied=true;}
+  if(player.hand.length===0){player.active=false;player.emptied=true;g.events.push({t:'empty',seat:player.seat,n:++g.evn});}
 }
 function endRound(g){
   const open=openFlowers(g.board); g.roundResults=[];
@@ -374,8 +381,8 @@ function botStep(g){
 function viewFor(g,seat){
   const open=openFlowers(g.board);
   return {side:g.side,round:g.round,nRounds:g.players.length,phase:g.phase,turn:g.turn,seat,
-    board:{side:g.side,cells:g.board.cells,blocked:g.board.blocked,flowers:g.board.flowers},lastPlaced:g.lastPlaced,open,
-    players:g.players.map(p=>({name:p.name,bot:p.bot,cards:p.hand.length,tokens:p.tokens,total:p.tokens.reduce((a,b)=>a+b,0),active:p.active,emptied:p.emptied})),
+    board:{side:g.side,cells:g.board.cells,blocked:g.board.blocked,flowers:g.board.flowers},lastPlaced:g.lastPlaced,open,events:g.events.slice(-6),
+    players:g.players.map(p=>({name:p.name,bot:p.bot,cards:p.hand.length,tokens:p.tokens,total:p.tokens.reduce((a,b)=>a+b,0),active:p.active,emptied:p.emptied,out:!p.active&&!p.emptied})),
     hand:seat!=null&&g.players[seat]?g.players[seat].hand:[],
     roundResults:g.roundResults};
 }
@@ -407,7 +414,10 @@ class LocalSession{
   onUpdate(cb){this.cb=cb;}
   begin(){this.runner.start({side:this.side,players:this.players});}
   currentSeat(){const g=this.runner.g; return g?g.turn:0;}
-  view(){const g=this.runner.g; if(!g) return null; return this.runner.view(g.phase==='play'?g.turn:null);}
+  mySeat(){const g=this.runner.g; if(!g) return null; const hs=g.players.map((p,i)=>p.bot?-1:i).filter(i=>i>=0);
+    if(hs.length===1) return hs[0];                       // one human: always show their hand
+    return g.players[g.turn]&&!g.players[g.turn].bot?g.turn:null;}   // hot-seat: only the player whose turn it is
+  view(){const g=this.runner.g; if(!g) return null; return this.runner.view(this.mySeat());}
   act(a){return this.runner.act(this.runner.g.turn,a);}
   nextRound(){return this.runner.act(0,{type:'nextRound'});}
   isMyTurn(){const g=this.runner.g; return g&&g.phase==='play'&&!g.players[g.turn].bot;}
@@ -659,7 +669,8 @@ $('btnStartTable').onclick=()=>{session.startGame();};
 // ---------- game ----------
 function onViewUpdate(){
   const v=view;
-  if(v.phase!=='play'){showScores();return;}
+  if(v.phase!=='play'){render();showScores();return;}
+  $('handpanel').hidden=false;
   const key=v.round+'-'+v.turn+'-'+v.players.reduce((a,p)=>a+p.cards,0);
   if(key!==lastTurnKey){
     lastTurnKey=key; ui.sel=null;ui.origin=null;ui.ori=0;
@@ -680,7 +691,14 @@ function flowerSVG(k){
 }
 function pieceSVG(card){
   const o=ORI[card.s][0]; const w=Math.max(...o.map(c=>c[0]))+1,h=Math.max(...o.map(c=>c[1]))+1;
-  const rects=o.map(([x,y])=>`<rect x="${x*10+0.6}" y="${(h-1-y)*10+0.6}" width="8.8" height="8.8" rx="1.2" fill="var(--${card.c})" stroke="#2f2a24" stroke-width=".7"/>`).join('');
+  const has=new Set(o.map(([x,y])=>x+','+y));
+  let rects=o.map(([x,y])=>`<rect x="${x*10}" y="${(h-1-y)*10}" width="10" height="10" fill="var(--${card.c})" stroke="none"/>`).join('');
+  for(const [x,y] of o){const X=x*10,Y=(h-1-y)*10;
+    if(!has.has(x+','+(y+1)))rects+=`<line x1="${X}" y1="${Y}" x2="${X+10}" y2="${Y}"/>`;
+    if(!has.has(x+','+(y-1)))rects+=`<line x1="${X}" y1="${Y+10}" x2="${X+10}" y2="${Y+10}"/>`;
+    if(!has.has((x-1)+','+y))rects+=`<line x1="${X}" y1="${Y}" x2="${X}" y2="${Y+10}"/>`;
+    if(!has.has((x+1)+','+y))rects+=`<line x1="${X+10}" y1="${Y}" x2="${X+10}" y2="${Y+10}"/>`;}
+  rects=`<g stroke="var(--outline)" stroke-width="1.8" stroke-linecap="square">${rects}</g>`;
   return `<svg viewBox="${-(5-w)*5} ${-(5-h)*5} 50 50" aria-label="${CNAME[card.c]} ${card.s}">${rects}</svg>`;
 }
 const boardEl=$('board'); let cellEls=[];
@@ -701,21 +719,32 @@ function render(){
     const d=cellEls[i],r=Math.floor(i/COLS);
     d.className='cell'+(b.side==='A'&&r===0?' anchor':'')+(blocked.has(i)?' seed':'');
     let h=''; const pc=b.cells[i];
-    if(pc) h+=`<div class="piece${v.lastPlaced.includes(i)?' new':''}" style="background:var(--${pc.c})"></div>`;
+    if(pc){
+      const same=(dc,dr)=>{const cc=i%COLS+dc,rr=r+dr;if(cc<0||cc>=COLS||rr<0||rr>=ROWS)return false;const q=b.cells[idx(cc,rr)];return !!q&&q.id===pc.id;};
+      const w=x=>x?'0':'2.5px';
+      h+=`<div class="piece${v.lastPlaced.includes(i)?' new':''}" style="background:var(--${pc.c});border-top-width:${w(same(0,1))};border-bottom-width:${w(same(0,-1))};border-left-width:${w(same(-1,0))};border-right-width:${w(same(1,0))}"></div>`;
+    }
     else if(fl[i]) h+=`<div class="flower">${flowerSVG(fl[i])}</div>`;
     if(ghost&&ghost.has(i)) h+=`<div class="ghost${ghostOK?'':' bad'}" style="background:var(--${ghostCol})"></div>`;
     d.innerHTML=h;
   }
-  const p=v.players[v.turn]; const you=session.kind==='local'?(p.bot?null:v.turn):session.seat;
-  const left=v.players.map((q,i)=>`${esc(q.name)}${i===you?' (you)':''} ${q.cards}${q.active?'':' ✓'}`).join(' · ');
-  $('banner').innerHTML=`<span class="swatch" style="background:${PALETTE[v.turn]}"></span><b>${esc(p.name)}'s turn${v.turn===you?' — that\'s you':''}</b> <span class="legend">Round ${v.round} of ${v.nRounds} · ${BOARDS[v.side].name} · cards: ${left}</span>`;
+  const p=v.players[v.turn]; const you=v.seat;
+  const left=v.players.map((q,i)=>`${esc(q.name)}${i===you?' (you)':''} ${q.cards}${q.emptied?' · done':q.out?' · out':''}`).join(' · ');
+  if(v.phase==='play') $('banner').innerHTML=`<span class="swatch" style="background:${PALETTE[v.turn]}"></span><b>${esc(p.name)}'s turn${v.turn===you?' — that\'s you':''}</b> <span class="legend">Round ${v.round} of ${v.nRounds} · ${BOARDS[v.side].name} · cards: ${left}</span>`;
+  else $('banner').innerHTML=`<b>Round ${v.round} is over — this is the final board</b> <span class="legend">${BOARDS[v.side].name} · cards left: ${left}</span>`;
+  $('events').innerHTML=(v.events||[]).slice(-3).map(e=>{const nm=e.seat===you?'You':esc(v.players[e.seat].name);
+    return e.t==='out'?`<b>${nm}</b> ${e.seat===you?'were':'was'} out — no legal play for ${e.cards} card${e.cards===1?'':'s'}`:`<b>${nm}</b> emptied ${e.seat===you?'your':'their'} hand`;}).join(' · ');
+  if(v.phase!=='play') return;
   const hand=$('hand'),st=$('status'),hint=$('hint'),ctl=$('controls');
   const flowersTxt=COLORS.map(k=>`${CNAME[k]} ${v.open[k]}`).join(', ');
   if(ui.hidden){hand.innerHTML='';st.textContent='';hint.textContent='';return;}
   if(!session.isMyTurn()){
     ctl.querySelectorAll('button').forEach(x=>x.disabled=true);
-    if(session.kind==='local'){hand.innerHTML='';st.textContent=p.name+' is thinking…';}
-    else{hand.innerHTML=v.hand.map(card=>`<span class="cardbtn" aria-hidden="true">${pieceSVG(card)}</span>`).join('');st.textContent=p.active?'Waiting for '+p.name+'…':'';}
+    hand.innerHTML=v.hand.map(card=>`<span class="cardbtn${allPlacements(b,card).length?'':' dead'}" aria-hidden="true">${pieceSVG(card)}</span>`).join('');
+    const me=you!=null?v.players[you]:null;
+    if(me&&me.out) st.innerHTML=`<span class="outnote">You're out for this round — none of your ${me.cards} card${me.cards===1?'':'s'} could be placed anywhere when your turn came.</span>`;
+    else if(me&&me.emptied) st.textContent='You emptied your hand. Waiting for the others to finish.';
+    else st.textContent=(p.bot?p.name+' is thinking…':'Waiting for '+p.name+'…');
     hint.textContent='Open flowers — '+flowersTxt+'.'; return;
   }
   ctl.querySelectorAll('button').forEach(x=>x.disabled=false);
@@ -725,7 +754,7 @@ function render(){
   if(ui.sel===null){st.textContent='Pick a card.';hint.textContent='Open flowers — '+flowersTxt+'. Faded cards have no legal spot right now.';}
   else if(ui.origin===null){st.textContent='Tap a square for the piece\'s bottom-left corner.';hint.textContent='Rotate or flip first if you like; the ghost shows where it would land.';}
   else{
-    let msg='Not legal here — it must cover an anchor/touch a seed, or touch two pieces with one matching colour.';
+    let msg='Not legal here — it must cover an anchor/touch a seed, or touch two different pieces with at least one in the same colour.';
     if(!ghostOK){const card=v.hand[ui.sel];const os=ORI[card.s];if(os.some((o,j)=>j!==ui.ori%os.length&&legal(b,cellsFor(card.s,j,ui.origin[0],ui.origin[1]),card.c)))msg='Not legal in this orientation, but the piece fits here another way — try Rotate or Flip.';}
     st.textContent=ghostOK?'Legal. Tap Place or tap the ghost again.':msg;hint.textContent='Open flowers — '+flowersTxt+'.';}
 }
@@ -752,6 +781,7 @@ document.addEventListener('keydown',e=>{if(!myTurn())return;if(e.key==='r'||e.ke
 // ---------- scores ----------
 function showScores(){
   const v=view; show('scores'); $('handoff').hidden=true;
+  $('game').hidden=false; $('handpanel').hidden=true; $('btnScores').hidden=true;   // keep the final board visible above the scores
   $('scoresTitle').textContent=v.phase==='gameover'?'Final scores':`Round ${v.round} scores`;
   let h='<tr><th>Player</th><th class="num">Cards left</th><th class="num">This round</th><th>Tokens</th><th class="num">Total</th></tr>';
   const rows=[...v.roundResults].sort((a,b)=>a.total-b.total);
@@ -776,7 +806,7 @@ $('btnScores').onclick=()=>{ // peek at standings mid-round
   let h='<tr><th>Player</th><th class="num">Cards in hand</th><th>Tokens</th><th class="num">Total</th></tr>';
   v.players.forEach((p,i)=>{h+=`<tr><td>${esc(p.name)}</td><td class="num">${p.cards}</td><td><span class="tokens">${p.tokens.map(t=>`<span class="tok">${t}</span>`).join('')}</span></td><td class="num"><b>${p.total}</b></td></tr>`;});
   $('scoreTable').innerHTML=h; $('roundNote').textContent=''; $('waitNote').textContent='';
-  const btn=$('btnContinue'); btn.textContent='Back to the board'; btn.disabled=false; btn.onclick=()=>{show('game');btn.onclick=continueHandler;};
+  const btn=$('btnContinue'); btn.textContent='Back to the board'; btn.disabled=false; btn.onclick=()=>{show('game');$('handpanel').hidden=false;btn.onclick=continueHandler;};
   show('scores'); $('btnLeave').hidden=false;
 };
 })();
